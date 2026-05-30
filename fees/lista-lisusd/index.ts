@@ -39,8 +39,18 @@ const wbeth = ADDRESSES.bsc.wBETH;
 const bnb = ADDRESSES.bsc.WBNB;
 const lisUSD = "0x0782b6d8c4551B9760e74c0545a9bCD90bdc41E5";
 const usdt = ADDRESSES.bsc.USDT;
+
+const LABELS = {
+  STAKING_REWARDS: 'Staking Rewards',
+  BORROW_INTEREST: 'lisUSD Borrow Interest',
+  LIQUIDATION_PROFIT: 'Liquidation Profit',
+  PENALTIES_AND_CONVERSION_FEES: 'Penalties and Conversion Fees',
+  LISTA_FREEZE_ADJUSTMENT: 'LISTA Freeze Adjustment',
+} as const;
+
 const fetch = async (options: FetchOptions) => {
   const dailyFees = options.createBalances();
+  const dailyRevenue = options.createBalances();
   const treasury = options.startOfDay>=newTreasuryActivationTime?newTreasury:oldTreasury;
 
   // eth staking profit - helioETHProvider and CeETHVault
@@ -173,76 +183,110 @@ const fetch = async (options: FetchOptions) => {
 
   [ ...ethStakingEth].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.add(eth, amount);
+    dailyFees.add(eth, amount, LABELS.STAKING_REWARDS);
+    dailyRevenue.add(eth, amount, LABELS.STAKING_REWARDS);
   });
   [...ethStakingWbeth].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.add(wbeth, amount);
+    dailyFees.add(wbeth, amount, LABELS.STAKING_REWARDS);
+    dailyRevenue.add(wbeth, amount, LABELS.STAKING_REWARDS);
   });
 
   [ ...bnbLiquidStakingProfit].forEach(
     (log) => {
       const amount = Number(log.data);
 
-      dailyFees.add(slisBNB, amount);
+      dailyFees.add(slisBNB, amount, LABELS.STAKING_REWARDS);
+      dailyRevenue.add(slisBNB, amount, LABELS.STAKING_REWARDS);
     }
   );
   [...borrowLisUSDInterest].forEach((log) => {
     const amount = Number(log.data);
 
-    dailyFees.add(lisUSD, amount);
+    dailyFees.add(lisUSD, amount, LABELS.BORROW_INTEREST);
+    dailyRevenue.add(lisUSD, amount, LABELS.BORROW_INTEREST);
   });
   [...veListaEarlyClaimPenalty].forEach(
     (log) => {
       const amount = Number(log.data);
 
-      dailyFees.add(lista, amount);
+      dailyFees.add(lista, amount, LABELS.PENALTIES_AND_CONVERSION_FEES);
+      dailyRevenue.add(lista, amount, LABELS.PENALTIES_AND_CONVERSION_FEES);
     }
   );
   [...liquidationProfit].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.add(lisUSD, amount);
+    dailyFees.add(lisUSD, amount, LABELS.LIQUIDATION_PROFIT);
+    dailyRevenue.add(lisUSD, amount, LABELS.LIQUIDATION_PROFIT);
   });
 
   [...veListaAutoCompoundFee].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.add(lista, amount);
+    dailyFees.add(lista, amount, LABELS.PENALTIES_AND_CONVERSION_FEES);
+    dailyRevenue.add(lista, amount, LABELS.PENALTIES_AND_CONVERSION_FEES);
   });
 
   [...liquidationBot].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.add(lisUSD, amount);
+    dailyFees.add(lisUSD, amount, LABELS.LIQUIDATION_PROFIT);
+    dailyRevenue.add(lisUSD, amount, LABELS.LIQUIDATION_PROFIT);
   });
   [...psmConvertFee].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.add(lisUSD, amount);
+    dailyFees.add(lisUSD, amount, LABELS.PENALTIES_AND_CONVERSION_FEES);
+    dailyRevenue.add(lisUSD, amount, LABELS.PENALTIES_AND_CONVERSION_FEES);
   });
   [...usdtStakingProfit].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.add(usdt, amount);
+    dailyFees.add(usdt, amount, LABELS.STAKING_REWARDS);
+    dailyRevenue.add(usdt, amount, LABELS.STAKING_REWARDS);
   });
   [...validatorRewards].forEach((log) => {
-    dailyFees.add(bnb, Number(log.value));
+    dailyFees.add(bnb, Number(log.value), LABELS.STAKING_REWARDS);
+    dailyRevenue.add(bnb, Number(log.value), LABELS.STAKING_REWARDS);
   });
   [...lpStakingListaRewards].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.add(lista, amount);
+    dailyFees.add(lista, amount, LABELS.STAKING_REWARDS);
+    dailyRevenue.add(lista, amount, LABELS.STAKING_REWARDS);
   });
   [...lpStakingCakeRewards].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.add(cake, amount);
+    dailyFees.add(cake, amount, LABELS.STAKING_REWARDS);
+    dailyRevenue.add(cake, amount, LABELS.STAKING_REWARDS);
   });
   [...freezeLista].forEach((log) => {
     const amount = Number(log.data);
-    dailyFees.subtractToken(lista, amount);
+    dailyFees.subtractToken(lista, amount, LABELS.LISTA_FREEZE_ADJUSTMENT);
+    dailyRevenue.subtractToken(lista, amount, LABELS.LISTA_FREEZE_ADJUSTMENT);
   });
-
-  const feeWithLabel = dailyFees.clone(1, 'Borrow Interest');
   
   return {
-    dailyFees: feeWithLabel,
-    dailyRevenue: feeWithLabel,
+    dailyFees,
+    dailyRevenue,
   };
+};
+
+const methodology = {
+  Fees: 'Includes fees and profit received by Lista DAO treasury wallets from staking, lisUSD borrowing, liquidations, penalties, PSM conversions, and LISTA freeze adjustments.',
+  Revenue: 'All tracked fees are counted as revenue because they are retained by Lista DAO treasury wallets.',
+};
+
+const breakdownMethodology = {
+  Fees: {
+    [LABELS.STAKING_REWARDS]: 'Staking-related rewards and profits sent to Lista DAO treasury wallets.',
+    [LABELS.BORROW_INTEREST]: 'lisUSD borrow interest minted to the treasury.',
+    [LABELS.LIQUIDATION_PROFIT]: 'lisUSD profit from flash-buy and bot liquidations.',
+    [LABELS.PENALTIES_AND_CONVERSION_FEES]: 'veLISTA penalties, auto-compound fees, and PSM conversion fees.',
+    [LABELS.LISTA_FREEZE_ADJUSTMENT]: 'LISTA sent to the burn address and subtracted from fees.',
+  },
+  Revenue: {
+    [LABELS.STAKING_REWARDS]: 'Staking-related rewards and profits kept by Lista DAO.',
+    [LABELS.BORROW_INTEREST]: 'lisUSD borrow interest kept by Lista DAO.',
+    [LABELS.LIQUIDATION_PROFIT]: 'Liquidation profit kept by Lista DAO.',
+    [LABELS.PENALTIES_AND_CONVERSION_FEES]: 'Penalties and conversion fees kept by Lista DAO.',
+    [LABELS.LISTA_FREEZE_ADJUSTMENT]: 'LISTA sent to the burn address and subtracted from revenue.',
+  },
 };
 
 const adapter: SimpleAdapter = {
@@ -254,6 +298,8 @@ const adapter: SimpleAdapter = {
       start: "2023-08-30",
     },
   },
+  methodology,
+  breakdownMethodology,
 };
 
 export default adapter;
